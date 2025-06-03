@@ -254,7 +254,8 @@ void mm_exp_higham(MarkovMatrix *P, MarkovMatrix *Q, double t, int do_mu) {
   LAPACK_DOUBLE mat[n*n], scale[n], matU[n*n], matV[n*n];
   LAPACK_INT ln, ilo, ihi, info, ipiv[n];
 
-  char job = 'B', side='R';
+  const char *job = "B";
+  const char *side = "R";
   Matrix *Qt = mat_create_copy(Q->matrix), **QtPow, **matArr, *U, *V;
   int do_balancing=0;  //balancing is not working yet, keep this at 0!
   mat_scale(Qt, t);
@@ -283,10 +284,17 @@ void mm_exp_higham(MarkovMatrix *P, MarkovMatrix *Q, double t, int do_mu) {
     mat_to_lapack(Qt, mat);
     ln = (LAPACK_INT)n;
 #ifdef R_LAPACK
-    F77_CALL(dgebal)(&job, &ln, mat, &ln, &ilo, &ihi, scale, &info FCONE);
+    int n = ln;
+    int lda = ln;
+    int ilo, ihi, info;
+    double scale[ln];
+    double *A= mat;
+    const char *job = "B";
+    F77_CALL(dgebal)(job, &n, A, &lda, &ilo, &ihi, scale, &info, (size_t)1);
 #else
-    dgebal_(&job, &ln, mat, &ln, &ilo, &ihi, scale, &info);
+    F77_CALL(job, &n, A, &lda, &ilo, &ihi, scale, &info,(size_t))1;
 #endif
+    
     if (info != 0)
       die("Error in balancing matrix in lapack routine dgebal info=%i\n", info);
     mat_from_lapack(Qt, mat);
@@ -400,7 +408,7 @@ void mm_exp_higham(MarkovMatrix *P, MarkovMatrix *Q, double t, int do_mu) {
 #ifdef R_LAPACK
   F77_CALL(dgesv)(&ln, &ln, matU, &ln, ipiv, matV, &ln, &info);
 #else
-  dgesv_(&ln, &ln, matU, &ln, ipiv, matV, &ln, &info);
+  F77_CALL(dgesv)(&ln, &ln, matU, &ln, ipiv, matV, &ln, &info);
 #endif
   if (info !=0)
     die("Error solving U'X=V' in mm_exp_higham");
@@ -422,10 +430,12 @@ void mm_exp_higham(MarkovMatrix *P, MarkovMatrix *Q, double t, int do_mu) {
     mat_to_lapack(P->matrix, mat);
     // undo balancing- check- this function is meant for eigenvalues,
     // not sure if job should be 'R' or 'L', or if it will work at all.
-#ifdef R_LAPACK
-    F77_CALL(dgebak)(&job, &side, &ln, &ilo, &ihi, scale, &ln, mat, &ln, &info FCONE FCONE);
+#ifdef R_LAPACKo
+    const char *job ="B"; 
+    const char *side = "R";
+    F77_CALL(dgebak)(job,side, &n, &ilo, &ihi, scale, &n, mat, &n, &info, 1, 1);
 #else
-    dgebak_(&job, &side, &ln, &ilo, &ihi, scale, &ln, mat, &ln, &info);
+    F77_CALL(dgebak)(job,side, &n, &ilo, &ihi, scale, &n, mat, &n, &info, 1, 1);
 #endif
     mat_from_lapack(P->matrix, mat);
   }
@@ -582,7 +592,7 @@ int mm_sample_state(MarkovMatrix *M, int state) {
 
 /* as above but by character */
 char mm_sample_backgd(char *labels, Vector *backgd) {
-  if (strlen(labels) != backgd->size) die("mm_sample_backgd: got num_labels=%i but backgd->size=%i\n", (int)strlen(labels), backgd->size);
+  if (strlen(labels) != backgd->size) die("mm_sample_backgd: got num_labels=%i but backgd->size=%i\n", strlen(labels), backgd->size);
   return labels[pv_draw_idx(backgd)];
 }
 
